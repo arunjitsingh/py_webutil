@@ -14,7 +14,11 @@ import re
 
 
 def _create_now_timestamp():
-    """Creates a timestamp (in seconds)."""
+    """Creates a timestamp (in seconds).
+
+    Returns:
+        A timestamp (in seconds).
+    """
     delta = dt.now() - dt.fromtimestamp(0)
     return delta.days * 86400 + delta.seconds
 
@@ -23,7 +27,8 @@ def _create_now_timestamp():
 class TimeCheck(object):
     """Decorator class to check the delay between requests.
 
-    A request must take at least or at most a specified amount of time.
+    The delay between two requests must be at least or at most a specified
+    amount of time.
 
     Attributes:
         strategy: The comparison strategy to use. One of TimeCheck.AT_LEAST,
@@ -43,7 +48,7 @@ class TimeCheck(object):
     # The name of the cookie to set
     _COOKIE_NAME = 'TCHK'
 
-    # The cookie string.
+    # The cookie string. Placeholders are name=hash|timestamp
     _COOKIE = '%s=%s|%s;'
 
     # RegEx to search for the cookie values. 128 is 2x the digestsize of sha512.
