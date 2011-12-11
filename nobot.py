@@ -61,7 +61,23 @@ class TimeCheck(object):
                     used.
         """
         TimeCheck._secret = secret
-    
+
+    @staticmethod
+    def set_initial_cookie(handler, secret=None):
+        """Sets a cookie for the request handler.
+
+        This can be useful for initially setting a cookie and then subsequently
+        using the decorator. The cookie is only set if one doesn't already
+        exist.
+
+        Args:
+            handler: webapp.RequestHandler for a request.
+            secret: The secret key. Defaults to TimeCheck._secret.
+        """
+        if not handler.request.cookies.get(TimeCheck._COOKIE_NAME):
+            time_check = TimeCheck(TimeCheck.AT_LEAST, 0, secret)
+            handler.response.headers['Set-Cookie'] = time_check._create_cookie()
+
     def __init__(self, strategy, delay, secret=None):
         """Initializes the decorator.
 
