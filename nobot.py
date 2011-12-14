@@ -11,6 +11,7 @@
 from datetime import datetime as dt
 import hashlib
 import re
+from uuid import uuid4
 
 
 def _create_now_timestamp():
@@ -48,11 +49,11 @@ class TimeCheck(object):
     # The name of the cookie to set
     _COOKIE_NAME = 'TCHK'
 
-    # The cookie string. Placeholders are name=hash|timestamp
-    _COOKIE = '%s=%s|%s;'
+    # The cookie string. Placeholders are name=hash|timestamp|uid;
+    _COOKIE = '%s=%s|%s|%s;path=/'
 
     # RegEx to search for the cookie values. 128 is 2x the digestsize of sha512.
-    _COOKIE_SEARCH_RE = '([0-9a-f]{128})\|(\d+)'
+    _COOKIE_SEARCH_RE = '([0-9a-f]{128})\|(\d+)\|([0-9a-f\-]+)'
 
     # The secret to use
     _secret = None
@@ -111,18 +112,25 @@ class TimeCheck(object):
         """Creates a timestamp and a hash using the timestamp and secret.
 
         Returns:
-            A two item tuple of the hash and timestamp.
+            A three item tuple of the hash, timestamp and uid.
         """
         sha = TimeCheck._HASH_TYPE()
         timestamp = _create_now_timestamp()
+        uid = str(uuid4())
         sha.update(str(timestamp))
         sha.update(self.secret)
+        sha.update(uid)
         timestamp_hash = sha.hexdigest()
         return (timestamp_hash, timestamp)
 
 
-    def _verify_hash_timestamp(self, timestamp_hash, timestamp):
+    def _verify_hash_timestamp(self, timestamp_hash, timestamp, uid):
         """Verifies if the hashes for the timestamp match.
+
+        Args:
+            timestamp_hash: The hash in the cookie.
+            timestamp: The timestamp of the request.
+            uid: A unique value.
 
         Returns:
             True, if the hashes match, False otherwise.
@@ -130,6 +138,7 @@ class TimeCheck(object):
         sha = TimeCheck._HASH_TYPE()
         sha.update(str(timestamp))
         sha.update(self.secret)
+        sha.update(str(uid))
         gen_timestamp_hash = sha.hexdigest()
         return gen_timestamp_hash == timestamp_hash
 
@@ -139,10 +148,11 @@ class TimeCheck(object):
         Returns:
             The cookie string.
         """
-        timestamp_hash, timestamp = self._create_hash_timestamp()
+        timestamp_hash, timestamp, uid = self._create_hash_timestamp()
         return TimeCheck._COOKIE % (TimeCheck._COOKIE_NAME,
                                     timestamp_hash,
-                                    str(timestamp))
+                                    str(timestamp),
+                                    uid)
 
     def _verify_cookie(self, cookie_str):
         """Verifies a cookie.
@@ -155,8 +165,8 @@ class TimeCheck(object):
         """
         found = re.search(TimeCheck._COOKIE_SEARCH_RE, cookie_str)
         if found:
-            timestamp_hash, timestamp = found.groups()
-            if self._verify_hash_timestamp(timestamp_hash, timestamp):
+            timestamp_hash, timestamp, uid = found.groups()
+            if self._verify_hash_timestamp(timestamp_hash, timestamp, uid):
                 return int(timestamp)
         return 0
 
