@@ -31,6 +31,13 @@ class TimeCheck(object):
     The delay between two requests must be at least or at most a specified
     amount of time.
 
+    Use a cache (like memcache) to cache generated hashes. This prevents replay
+    attacks. The object used as an interface to caching must implement these
+    methods:
+        set(<str>key, <*>value)
+        get(<str>key)
+        delete(<str>key)
+
     Attributes:
         strategy: The comparison strategy to use. One of TimeCheck.AT_LEAST,
                 TimeCheck.AT_MOST.
@@ -58,6 +65,10 @@ class TimeCheck(object):
     # The secret to use
     _secret = None
 
+    # The caching object to use. The object must implement 'set', 'get' and
+    # 'delete' methods.
+    _cache = None
+
     @staticmethod
     def set_secret(secret):
         """Sets the secret key for hashing the times.
@@ -67,6 +78,18 @@ class TimeCheck(object):
                     used.
         """
         TimeCheck._secret = secret
+
+    @staticmethod
+    def set_cache(cache):
+        """Sets the caching mechanism.
+
+        Args:
+            cache: The cache object.
+        """
+        if (hasattr(cache, 'set') and
+            hasattr(cache, 'get') and
+            hasattr(cache, 'delete')):
+            TimeCheck._cache = cache
 
     @staticmethod
     def set_initial_cookie(handler, secret=None):
@@ -121,7 +144,9 @@ class TimeCheck(object):
         sha.update(self.secret)
         sha.update(uid)
         timestamp_hash = sha.hexdigest()
-        return (timestamp_hash, timestamp)
+        if TimeCheck._cache:
+            TimeCheck._cache.set(timestamp_hash, str(timestamp))
+        return (timestamp_hash, timestamp, uid)
 
 
     def _verify_hash_timestamp(self, timestamp_hash, timestamp, uid):
@@ -135,6 +160,12 @@ class TimeCheck(object):
         Returns:
             True, if the hashes match, False otherwise.
         """
+        if TimeCheck._cache:
+            cached_timestamp = TimeCheck._cache.get(timestamp_hash)
+            if not cached_timestamp or cached_timestamp != str(timestamp):
+                return False
+            else:
+                TimeCheck._cache.delete(timestamp_hash)
         sha = TimeCheck._HASH_TYPE()
         sha.update(str(timestamp))
         sha.update(self.secret)
@@ -182,15 +213,15 @@ class TimeCheck(object):
         """
         def wrapper(handler, *args, **kwargs):
             """The wrapper for a RequestHandler.
-            
+
             Args:
                 handler: An instance of RequestHandler.
             """
-            handler.response.headers['Set-Cookie'] = self._create_cookie()
             cookie = handler.request.cookies.get(TimeCheck._COOKIE_NAME)
             if not cookie:
                 handler.error(400)
                 return
+            handler.response.headers['Set-Cookie'] = self._create_cookie()
             if isinstance(cookie, list):
                 cookie = cookie[0]
             cookie_str = str(cookie)
