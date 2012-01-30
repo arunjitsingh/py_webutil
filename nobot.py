@@ -235,5 +235,5 @@ class TimeCheck(object):
                 if self.strategy(delta_seconds, self.delay) != self.delay:
                     handler.error(403)
                     return
-            method(handler, *args, **kwargs)
+            return method(handler, *args, **kwargs)
         return wrapper
